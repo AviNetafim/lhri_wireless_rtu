@@ -1,3 +1,8 @@
+/*
+* timer setting test for mancode
+* test again after integration with wirless server  functionalities
+* created  1/1/2026
+*/
 #include <Arduino.h>
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"

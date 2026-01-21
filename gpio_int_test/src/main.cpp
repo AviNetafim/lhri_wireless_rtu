@@ -1,3 +1,9 @@
+/*
+* test eps32-pico-mini code to use gpio interrupt 
+* test again  after integration with wireless server functionalities
+* created 1/1/2026
+*/
+
 #include <Arduino.h>
 
 static const uint8_t GPIO_INT_PIN = 4;
@@ -23,7 +29,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(GPIO_INT_PIN, INPUT_PULLUP);
   enable_gpio4_interrupt();
-  Serial.println("GPIO4 interrupt enabled");
+  Serial.println("GPIO interrupt test");
 }
 
 void loop() {
