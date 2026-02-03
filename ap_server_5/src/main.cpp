@@ -1,7 +1,7 @@
 /*
-* integration of ap_server_3  with timer use for mancoding
-* client set send register, get ackknowledge ant than  resposne flag update
-* created 28/01/2026
+* integration of ap_server_4 and gpio_int_test
+* client set send register, get acknowledge ant than response  with  interrupt counts 
+* created 03/02/2026
 */
 
 
@@ -10,6 +10,8 @@
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"
 
+#define RX_GPIO 4                                                         // mancode receive pin 
+#define TX_GPIO 13                                                        // mancode transmit pin 
 #define TCP_PORT 8080
 #define RX_BUF_SIZE 256
 
@@ -53,6 +55,8 @@ uint8_t on_delay = 0;                                                   // on de
 uint8_t send = 0;                                                       // varaible set by serial monitor command to startsending a message
 uint16_t nrtoc = 0;                                                     // no response timeout counter
 uint16_t half_bit_cnt = 0;
+volatile bool rec_flag = false;
+uint8_t rec_cnt = 0;
 uint8_t do_state = 0;
 
 //-----------------------------------  RTU registers ---------------------------------------------------
@@ -72,15 +76,23 @@ registers regs[] = {                                                    // regis
 void timer_init();
 static inline uint64_t get_timer_cnt();
 static inline void reset_timer();
+void IRAM_ATTR gpio4_isr();
+void enable_gpio4_interrupt();
+void disable_gpio4_interrupt();
+void show_error_msg(String arg_text);
+
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("ap_server_4");
+  Serial.println("ap_server_5");
   as.Init(AP_SSID,AP_PASS);                                           // Initialize serial communication
   Serial.println("TCP server ready");
-  pinMode (13,OUTPUT);
-  digitalWrite(13,LOW);
+  pinMode (RX_GPIO,OUTPUT);                                                // comapre version!!!
+  digitalWrite(RX_GPIO,LOW);
   timer_init();
+  pinMode(RX_GPIO, INPUT_PULLUP);
+  enable_gpio4_interrupt();
+
 }
 
 void loop(){
@@ -105,7 +117,7 @@ void loop(){
       // ------------- server responded, check response ------------------------------------------
 
       if (half_bit_cnt > 32){
-        as.send_reg(2,1);                                   // send response state host with response value 0
+        as.send_reg(2,rec_cnt);                                  // send response state host with response value 0
         Serial.println("rtu received respsonse");
         half_bit_cnt = 0 ;
       }
@@ -116,8 +128,8 @@ void loop(){
         reset_timer();
         if (half_bit_cnt > 32){                            
           state = WAIT_RECEIVE;
-        } 
-        if (do_state == 0){
+        }    
+          if (do_state == 0){
           digitalWrite(13,HIGH);
           do_state = 1;
          }
@@ -126,24 +138,28 @@ void loop(){
           do_state = 0;        
         }
         half_bit_cnt += 1;
-      }
+        }
     break;
 
     case WAIT_RECEIVE:                                     // wait for server response, stop at timeout
+    if (rec_flag == true){
+      rec_flag = 0;
+      rec_cnt += 1; 
+      Serial.println(rec_cnt);
+    }
       state = RECEIVE;                                            // set receiver to receive mode
     break;
 
     case RECEIVE: // get here  by receiver byte start from WAIT_RECEIVE, untill message timeout (5 bits)
       state = WAIT_SEND;
     break;
+  }
 }
-}
-
 
 void timer_init(){
     // configure timer with 0.5us clock, up counting, freee running
     TIMERG0.hw_timer[0].config.enable = 0;                              // Stop timer before setting
-    TIMERG0.hw_timer[0].config.divider = DIVIDER;                       // 80 MHz / 40 = 2 MHz (0.5 µs)
+    TIMERG0.hw_timer[0].config.divider = DIVIDER+1;                      // 80 MHz / 40 = 2 MHz (0.5 µs)
     TIMERG0.hw_timer[0].config.increase = 1;                            // Count up
     TIMERG0.hw_timer[0].config.autoreload = 0;                          // free running mode
     TIMERG0.hw_timer[0].config.alarm_en = 0;                            // no alarm value
@@ -152,10 +168,6 @@ void timer_init(){
     TIMERG0.hw_timer[0].load_high = 0;
     TIMERG0.hw_timer[0].reload    = 1;
     TIMERG0.hw_timer[0].config.enable = 1;                              // Start timer
-}
-
-void show_error_msg(String arg_text){
-if (PRINT_ON == 1) Serial.println(arg_text);
 }
 
 static inline uint64_t get_timer_cnt(){
@@ -172,3 +184,28 @@ static inline void reset_timer(){
     TIMERG0.hw_timer[0].load_high = 0;
     TIMERG0.hw_timer[0].reload = 1;
 }
+
+void IRAM_ATTR gpio4_isr(){
+  rec_flag = true;
+}
+
+void enable_gpio4_interrupt(){
+  // Enable interrupt
+  attachInterrupt(digitalPinToInterrupt(RX_GPIO), gpio4_isr,FALLING);
+}
+
+void disable_gpio4_interrupt(){
+  //Disable interrupt */
+  detachInterrupt(digitalPinToInterrupt(RX_GPIO));
+}
+
+void show_error_msg(String arg_text){
+if (PRINT_ON == 1) Serial.println(arg_text);
+}
+
+void IRAM_ATTR gpio4_isr();
+void enable_gpio4_interrupt();
+void disable_gpio4_interrupt();
+void show_error_msg(String arg_text);
+
+
