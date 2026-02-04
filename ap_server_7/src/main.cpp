@@ -75,10 +75,9 @@ void show_error_msg(String arg_text);
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("ap_server_77");
-  as.Init(AP_SSID,AP_PASS);                                           // Initialize serial communication
+  Serial.println("ap_server_7");
   Serial.println("TCP server ready");
-  mc.init();
+  mc.Init();
 }
 
 void loop(){
