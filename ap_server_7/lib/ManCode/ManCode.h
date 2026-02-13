@@ -69,6 +69,7 @@ class ManCode{
     uint16_t _idle_cnt;                                     // half bit counts when no receiver is idle
     uint8_t _last_data_bit;                                 // for receiver idle sensing
     uint8_t _switch_var;                                    // manchester coding switch-case varibale 
+    uint8_t _int_attached;
 };
 
 #endif

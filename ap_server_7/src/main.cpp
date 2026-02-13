@@ -141,7 +141,7 @@ void loop(){
           Serial.println("transmission ended - go to WAIT_RECEIVE");
           trs_ptr = 0;
           nrtoc = 0;                                                    // reset no respone timeout counter      
-          mc.clear_gpio4_int();                                                                                     
+          // mc.clear_gpio4_int();                                                                                     
           byte_start = 0;
           mc.enable_gpio4_int();
         }

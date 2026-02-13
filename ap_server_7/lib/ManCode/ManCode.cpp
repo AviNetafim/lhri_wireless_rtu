@@ -2,7 +2,7 @@
 #include  "ManCode.h"
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"
-#include "soc/gpio_struct.h"
+// #include "soc/gpio_struct.h"
 
 ManCode::ManCode(){
 }
@@ -109,7 +109,7 @@ void ManCode::RecMsg(){
                     _byte_val = 0;
                     _rec_ptr += 1;        
                 }
-                clear_gpio4_int();                                           // clear INT0 pending interrupts   
+                // clear_gpio4_int();                                           // clear INT0 pending interrupts   
                 enable_gpio4_int();                                           // enable INT0 to receive next byte
             break;
         }
@@ -212,14 +212,20 @@ void ManCode::reset_timer(){
 
 void ManCode::enable_gpio4_int(){
   // Enable interrupt
-  attachInterrupt(digitalPinToInterrupt(RECIO), gpio4_isr,FALLING);
+  if (_int_attached == 0){
+    attachInterrupt(digitalPinToInterrupt(RECIO), gpio4_isr,FALLING);
+    _int_attached  = 1;
+  }
 }
 
 void ManCode::disable_gpio4_int(){
   //Disable interrupt */
-  detachInterrupt(digitalPinToInterrupt(RECIO));
+  if (_int_attached == 1){
+    detachInterrupt(digitalPinToInterrupt(RECIO));
+    _int_attached  = 0;
+  }
 }
 
-void ManCode::clear_gpio4_int(){
-    GPIO.status_w1tc = (1 << 4);                                        // Clear pending interrupt for GPIO4
-}
+// void ManCode::clear_gpio4_int(){
+//     GPIO.status_w1tc = (1 << 4);                                        // Clear pending interrupt for GPIO4
+// }
