@@ -33,7 +33,9 @@ lhri_str LhriProtocol::SendMsg (lhri_msg arg_msg){                      // conve
 
   if (_flds[pload].len > 0) trs_rev_bits(pload);                        // revert pload 
   _pos += _flds[pload].len;
+  Serial.print("_pos="); Serial.print(_pos);
   uint8_t trs_bytes_len = _pos  >> 3 ;                                  // divide bit length by 8 to get bytes count 
+  Serial.print(", len="); Serial.println(trs_bytes_len);
   for (i = 0 ; i < trs_bytes_len ; i++){                                // convert message bit stream to byte string 
     _msg.bytes[i] = 0;
     for (int j = 0  ; j <8 ; j++){

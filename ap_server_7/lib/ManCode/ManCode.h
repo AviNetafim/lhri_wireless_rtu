@@ -1,3 +1,4 @@
+
 /* T = 1 / baud rate
 * Timer  counter period is set to 1/2T 
 * timer 1 pre scaler 8 - timer clock = 0.5us 
@@ -34,15 +35,17 @@ const uint8_t rec_switch_array[BYTE_LENGTH] = {0,1,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2
 const uint8_t trs_switch_array[BYTE_LENGTH] =      {0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3};    // use in manchester coding 
 //                                             0         5         10        15      
 
+void IRAM_ATTR gpio4_isr();
+
 class ManCode{
   public:
     ManCode();
-    void Init();
+    void Init(uint16_t arg_divider);
     void StartReceiveMessage();                             // respond to INT0 interrupt when meddage begins     
     void StartReceiveByte(uint16_t arg_half_bit);           // respond to INT0 interrupt when new byte begins    
-    bool RecMsg();                                          // read and decode message 
+    void RecMsg();                                          // read and decode message 
     bool TimeOut();                                         // check for message end    
-    uint8_t MsgClear();                                     // reset rec pointer    
+    void MsgClear();                                     // reset rec pointer    
     uint8_t MsgLen();                                       // get received message length  
     void GetMsg(uint8_t *arg_msg);                          
     bool SendByte(uint8_t sent_byte,uint8_t port);
@@ -70,5 +73,3 @@ class ManCode{
 
 #endif
  
-
-
