@@ -34,7 +34,7 @@ void ManCode::Init(uint16_t arg_divider){
     TIMERG0.hw_timer[0].reload    = 1;
     TIMERG0.hw_timer[0].config.enable = 1;                              // Start timer
     reset_timer();
-    disable_gpio4_int();
+    enable_gpio4_int();
 
 }  
 
@@ -47,12 +47,12 @@ void ManCode::StartReceiveByte(uint16_t arg_half_bit){
     uint16_t qbit = 0;
     reset_timer();
     qbit = arg_half_bit >> 1;
-    while (get_timer_cnt() < qbit);                                                 // wait here for a quarter bit to elapse  
-    reset_timer() ;                                                           // reset timer counter  for next sampling
-    _start_bit_val = digitalRead(RECIO);                                  // read first half of start bit value 
-    _half_bit_cnt = 1;                                                    // set half bit counter ready for next half  
+    while (get_timer_cnt() < qbit);                                      // wait here for a quarter bit to elapse  
+    reset_timer() ;                                                      // reset timer counter  for next sampling
+    _start_bit_val = digitalRead(RECIO);                                 // read first half of start bit value 
+    _half_bit_cnt = 1;                                                   // set half bit counter ready for next half  
     _byte_err = 0;
-    disable_gpio4_int();                                                // disable further INT0  until byte end
+    disable_gpio4_int();                                                 // disable further INT0  until byte end
 }
 
 void ManCode::RecMsg(){
