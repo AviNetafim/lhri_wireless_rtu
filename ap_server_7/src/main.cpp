@@ -27,7 +27,7 @@
 #define CPU_CLOCK 80000000                                              // esp32 has 80Mhz clock
 #define BAUDRATE 1200                                                   // half bit time = 417us
 #define DIVIDER 40 // divide clock by 40
-#define NO_RESP_TIME 12000                                            // no response timeout for defined bauderate is 417us * 12000 = 5s
+#define NO_RESP_TIME 8000                                               // no response timeout for defined bauderate is 417us * 8000 = 3.5s
 #define PRINT_ON 1                                                      // serial monitor printing swtich
 
 #define DIR 0 // indexes for received message fields
@@ -103,7 +103,7 @@ void loop(){
         Serial.println("start transmission go to SEND");
         mc.TxEnable(UP,HIGH);                                           // enable up port for message transmission        
         trs_ptr = 0;         
-        mc.reset_timer();
+        mc.clear_timer();
       } 
       else{        
         // ------------- check if server responded  -----------------------------------------------
@@ -126,13 +126,13 @@ void loop(){
       break;
 
     case SEND:
-      if (mc.get_timer_cnt() > half_bit){                           // wait for timer1 half bit count
-        mc.reset_timer();
+      if (mc.read_timer() > half_bit){                           // wait for timer1 half bit count
+        mc.clear_timer();
         if (trs_ptr < trs_str.len){                                     // more bytes to send 
           if (mc.SendByte(trs_str.bytes[trs_ptr],UP)){                  // byte end when true
             trs_ptr += 1;
-            while(mc.get_timer_cnt() < byte_delay);                                  // insert a delay between bytes
-            mc.reset_timer();
+            while(mc.read_timer() < byte_delay);                                  // insert a delay between bytes
+            mc.clear_timer();
           }    
         }
         else{                                                           // all bytes sent    
@@ -143,21 +143,21 @@ void loop(){
           nrtoc = 0;                                                    // reset no respone timeout counter      
           // mc.clear_gpio4_int();                                                                                     
           byte_start = 0;
-          // mc.enable_gpio4_int();
+          mc.enable_gpio4_int();
         }
       }
     break;
 
     case WAIT_RECEIVE:                                                  // wait for server response, stop at timeout
-      if (mc.get_timer_cnt() > half_bit){                               // count half bits 
-        mc.reset_timer();
+      if (mc.read_timer() > half_bit){                               // count half bits 
+        mc.clear_timer();
         nrtoc += 1;
         if (nrtoc > NO_RESP_TIME){                                      // no response received, stop waiting for the message
           state = WAIT_SEND;                                            // return to idle 
           Serial.println("timeout - go to WAIT_SEND");
           send = 0;
           nrtoc = 0;
-          // mc.disable_gpio4_int();                                        // disable INT0 when waiting for next client command             
+          mc.disable_gpio4_int();                                        // disable INT0 when waiting for next client command             
         }
       }
       if (byte_start == 1){                                             // INT0 - response received  
@@ -172,8 +172,8 @@ void loop(){
         byte_start = 0;
         mc.StartReceiveByte(half_bit);                                  // wait for qtr bit here and sample first half odf start bit, diable INT0 
       } 
-      if (mc.get_timer_cnt() > half_bit){                                            // get here, every half bit when receive == 1, timer is reset whenever a byte begins
-        mc.reset_timer(); 
+      if (mc.read_timer() > half_bit){                                            // get here, every half bit when receive == 1, timer is reset whenever a byte begins
+        mc.clear_timer(); 
         mc.RecMsg();                                                    // enable INT0 at the end of each byte
         if(mc.TimeOut()){
           state = WAIT_SEND;
@@ -199,6 +199,10 @@ void parse_parameter(){
   ParNo = ParameterList.indexOf(ParameterCode);
   inString.substring(1,8).toCharArray(char_array, sizeof(char_array));  // get serial monitor command data into char array 
   ParVal = strtol(char_array, NULL, 16);                                //  convert char array to hex number
+  Serial.print(ParNo);
+  Serial.print(",");
+  Serial.print(ParVal);
+
   if (ParNo >= 0)  {
     switch(ParNo){
       case 0:                                                           // paramater "s", send message

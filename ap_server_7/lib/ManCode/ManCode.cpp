@@ -23,18 +23,9 @@ void ManCode::Init(uint16_t arg_divider){
     pinMode(RECIO,INPUT);
     _half_bit_cnt = 0;   
     // configure timer with 0.5us clock, up counting, freee running
-    TIMERG0.hw_timer[0].config.enable = 0;                              // Stop timer before setting
-    TIMERG0.hw_timer[0].config.divider = arg_divider;                   // 80 MHz / 40 = 2 MHz (0.5 µs)
-    TIMERG0.hw_timer[0].config.increase = 1;                            // Count up
-    TIMERG0.hw_timer[0].config.autoreload = 0;                          // free running mode
-    TIMERG0.hw_timer[0].config.alarm_en = 0;                            // no alarm value
-    TIMERG0.int_ena.val = 0;                                            // Disable interrupts explicitly
-    TIMERG0.hw_timer[0].load_low  = 0;                                  // Load counter = 0
-    TIMERG0.hw_timer[0].load_high = 0;
-    TIMERG0.hw_timer[0].reload    = 1;
-    TIMERG0.hw_timer[0].config.enable = 1;                              // Start timer
-    reset_timer();
-    // enable_gpio4_int();
+    _timer0 = timerBegin(0,40,true);
+    timerWrite(_timer0,0);
+    enable_gpio4_int();
 
 }  
 
@@ -45,14 +36,14 @@ void ManCode::StartReceiveMessage(){
 
 void ManCode::StartReceiveByte(uint16_t arg_half_bit){
     uint16_t qbit = 0;
-    reset_timer();
+    clear_timer();
     qbit = arg_half_bit >> 1;
-    while (get_timer_cnt() < qbit);                                      // wait here for a quarter bit to elapse  
-    reset_timer() ;                                                      // reset timer counter  for next sampling
+    while (read_timer() < qbit);                                      // wait here for a quarter bit to elapse  
+    clear_timer() ;                                                      // reset timer counter  for next sampling
     _start_bit_val = digitalRead(RECIO);                                 // read first half of start bit value 
     _half_bit_cnt = 1;                                                   // set half bit counter ready for next half  
     _byte_err = 0;
-    // disable_gpio4_int();                                                 // disable further INT0  until byte end
+    disable_gpio4_int();                                                 // disable further INT0  until byte end
 }
 
 void ManCode::RecMsg(){
@@ -110,7 +101,7 @@ void ManCode::RecMsg(){
                     _rec_ptr += 1;        
                 }
                 // clear_gpio4_int();                                           // clear INT0 pending interrupts   
-                // enable_gpio4_int();                                           // enable INT0 to receive next byte
+                enable_gpio4_int();                                           // enable INT0 to receive next byte
             break;
         }
         _half_bit_cnt += 1;
@@ -128,7 +119,7 @@ bool ManCode::TimeOut(){
             Serial.print("err="); 
             Serial.println(_byte_err);
         } 
-        // disable_gpio4_int();                                            // disable further INT0 until respond is sent 
+        disable_gpio4_int();                                                // disable further INT0 until respond is sent 
         return true;
     }
     return false;
@@ -184,12 +175,6 @@ bool ManCode::SendByte(uint8_t sent_byte,uint8_t port){
             digitalWrite(trsio_map[port],HIGH);
         break;
     }
-    Serial.print("hb_cnt = ,"); Serial.print(_half_bit_cnt);
-    Serial.print(", bit_cnt = ,"); Serial.print(bit_cnt);
-    Serial.print(", sent_bit = ,"); Serial.print(sent_bit);
-    Serial.print(", wr_code = ,"); Serial.print(write_code);
-    Serial.print(", sent_byte = ,"); Serial.print(sent_byte,HEX);
-    Serial.print(", sw_var = ,"); Serial.println(_switch_var);
 
     if (++_half_bit_cnt >= BYTE_LENGTH)  {                                // byte transmission ended     
         _half_bit_cnt=0;
@@ -202,19 +187,12 @@ void ManCode::TxEnable(uint8_t port,uint8_t state){                     // enabl
     digitalWrite(enable_map[port],state);
 }
 
-uint64_t ManCode::get_timer_cnt(){
-    // update counter value an read
-    TIMERG0.hw_timer[0].update = 1;
-    uint32_t lo = TIMERG0.hw_timer[0].cnt_low;
-    uint32_t hi = TIMERG0.hw_timer[0].cnt_high;
-    return ((uint64_t)hi << 32) | lo;
+uint64_t ManCode::read_timer(){
+    return timerRead(_timer0);
 }
 
-void ManCode::reset_timer(){
-    // reset timer
-    TIMERG0.hw_timer[0].load_low  = 0;
-    TIMERG0.hw_timer[0].load_high = 0;
-    TIMERG0.hw_timer[0].reload = 1;
+void ManCode::clear_timer(){
+    timerWrite(_timer0,0);  
 }
 
 void ManCode::enable_gpio4_int(){

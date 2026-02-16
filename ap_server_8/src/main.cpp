@@ -24,7 +24,7 @@
 
 
 #define CPU_CLOCK 80000000                                              // esp32 has 80Mhz clock
-#define BAUDRATE 300                                                    // half bit time = 1667us
+#define BAUDRATE 1200                                                   // half bit time = 1667us
 #define DIVIDER 40 // divide clock by 40                                // clock is set to 80e6 /40 = 2Mhz -> 0.5us
 #define NO_RESP_TIME 1800                                               // no response timeout for defined bauderate is 1.67 * 1800 = 3s
 #define PRINT_ON 1                                                      // serial monitor printing swtich
@@ -86,13 +86,13 @@ void loop(){
         send = 0;
         start_ms = micros();
         state = SEND;                                                   // send message, to which GPIO output? TBD
-        mc.reset_timer();
+        mc.clear_timer();
       } 
     break;
 
     case SEND:
-      if (mc.get_timer_cnt() > half_bit){                           // wait for timer1 half bit count
-        mc.reset_timer();
+      if (mc.read_timer() > half_bit){                           // wait for timer1 half bit count
+        mc.clear_timer();
         if (mc.SendByte(sent_byte,UP)){                               // byte end when true
           state = WAIT_SEND;                                         // enable receiver for server respond 
             //   byte_end_ms = micros();
@@ -154,3 +154,5 @@ void parse_parameter(){
     Serial.println("Wrong parameter type");
   }
 }
+
+

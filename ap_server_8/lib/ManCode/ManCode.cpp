@@ -81,6 +81,14 @@ bool ManCode::SendByte(uint8_t sent_byte,uint8_t port){
     return false;
 }
 
+uint64_t ManCode::read_timer(){
+    return timerRead(_timer0);
+}
+
+void ManCode::clear_timer(){
+    timerWrite(_timer0,0);
+}
+
 void ManCode::clear_log(){
     int i,j;
     for ( i = 0 ; i < 24 ; i++){
@@ -90,3 +98,5 @@ void ManCode::clear_log(){
     }
     log_cnt = 0;
 }
+
+

@@ -50,12 +50,13 @@ class ManCode{
     void GetMsg(uint8_t *arg_msg);                          
     bool SendByte(uint8_t sent_byte,uint8_t port);
     void TxEnable(uint8_t port, uint8_t state);             // enable 485 output port
-    uint64_t get_timer_cnt();
-    void reset_timer();
+    uint64_t read_timer();
+    void clear_timer();
     void enable_gpio4_int();
     void disable_gpio4_int();
     void clear_gpio4_int();
   private:
+    hw_timer_t *_timer0 = nullptr;
     uint16_t _half_bit;                                     // half bit length  
     uint8_t _half_bit_cnt;                                  // half bits in processed byte counter
     uint8_t _start_bit_val;                                 // first half of received start bit value 

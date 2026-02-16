@@ -1,4 +1,5 @@
 
+
 /* T = 1 / baud rate
 * Timer  counter period is set to 1/2T 
 * timer 1 pre scaler 8 - timer clock = 0.5us 
@@ -43,6 +44,8 @@ class ManCode{
     void Init(uint16_t arg_divider);
     uint8_t MsgLen();                                       // get received message length  
     bool SendByte(uint8_t sent_byte,uint8_t port);
+    uint64_t read_timer();
+    void clear_timer();
     void clear_log();
     uint8_t log_cnt;
     uint64_t log_data[24][8];
@@ -56,4 +59,3 @@ class ManCode{
 };
 
 #endif
- 
