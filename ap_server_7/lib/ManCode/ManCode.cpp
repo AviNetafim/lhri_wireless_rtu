@@ -34,7 +34,7 @@ void ManCode::Init(uint16_t arg_divider){
     TIMERG0.hw_timer[0].reload    = 1;
     TIMERG0.hw_timer[0].config.enable = 1;                              // Start timer
     reset_timer();
-    enable_gpio4_int();
+    // enable_gpio4_int();
 
 }  
 
@@ -52,7 +52,7 @@ void ManCode::StartReceiveByte(uint16_t arg_half_bit){
     _start_bit_val = digitalRead(RECIO);                                 // read first half of start bit value 
     _half_bit_cnt = 1;                                                   // set half bit counter ready for next half  
     _byte_err = 0;
-    disable_gpio4_int();                                                 // disable further INT0  until byte end
+    // disable_gpio4_int();                                                 // disable further INT0  until byte end
 }
 
 void ManCode::RecMsg(){
@@ -110,7 +110,7 @@ void ManCode::RecMsg(){
                     _rec_ptr += 1;        
                 }
                 // clear_gpio4_int();                                           // clear INT0 pending interrupts   
-                enable_gpio4_int();                                           // enable INT0 to receive next byte
+                // enable_gpio4_int();                                           // enable INT0 to receive next byte
             break;
         }
         _half_bit_cnt += 1;
@@ -128,7 +128,7 @@ bool ManCode::TimeOut(){
             Serial.print("err="); 
             Serial.println(_byte_err);
         } 
-        disable_gpio4_int();                                            // disable further INT0 until respond is sent 
+        // disable_gpio4_int();                                            // disable further INT0 until respond is sent 
         return true;
     }
     return false;
@@ -184,6 +184,13 @@ bool ManCode::SendByte(uint8_t sent_byte,uint8_t port){
             digitalWrite(trsio_map[port],HIGH);
         break;
     }
+    Serial.print("hb_cnt = ,"); Serial.print(_half_bit_cnt);
+    Serial.print(", bit_cnt = ,"); Serial.print(bit_cnt);
+    Serial.print(", sent_bit = ,"); Serial.print(sent_bit);
+    Serial.print(", wr_code = ,"); Serial.print(write_code);
+    Serial.print(", sent_byte = ,"); Serial.print(sent_byte,HEX);
+    Serial.print(", sw_var = ,"); Serial.println(_switch_var);
+
     if (++_half_bit_cnt >= BYTE_LENGTH)  {                                // byte transmission ended     
         _half_bit_cnt=0;
         return true;

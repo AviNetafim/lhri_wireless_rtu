@@ -143,7 +143,7 @@ void loop(){
           nrtoc = 0;                                                    // reset no respone timeout counter      
           // mc.clear_gpio4_int();                                                                                     
           byte_start = 0;
-          mc.enable_gpio4_int();
+          // mc.enable_gpio4_int();
         }
       }
     break;
@@ -157,7 +157,7 @@ void loop(){
           Serial.println("timeout - go to WAIT_SEND");
           send = 0;
           nrtoc = 0;
-          mc.disable_gpio4_int();                                        // disable INT0 when waiting for next client command             
+          // mc.disable_gpio4_int();                                        // disable INT0 when waiting for next client command             
         }
       }
       if (byte_start == 1){                                             // INT0 - response received  
