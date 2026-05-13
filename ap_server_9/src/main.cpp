@@ -1,6 +1,6 @@
 
 /*
-* full lhri brdige  tcp NetRtu implementation
+* full lhri brdige tcp NetRtu implementation
 * created 17/02/2026
 */
 
@@ -22,7 +22,8 @@
 #define CPU_CLOCK 80000000                                              // esp32 has 80Mhz clock
 #define BAUDRATE 1200                                                   // half bit time = 417us
 #define DIVIDER 40 // divide clock by 40
-#define NO_RESP_TIME 10000                                              // no response timeout for defined bauderate is 417us * 8000 = 3.5s
+#define NO_RESP_ACT 10000                                               // no response timeout for defined bauderate is 417us * 1000 = 4.2s
+#define NO_RESP_OTHER 8500                                              // no response timeout for defined bauderate is 417us * 8000 = 1.04s
 #define PRINT_ON 1                                                      // serial monitor printing swtich
 
 #define DIR 0 // indexes for received message fields
@@ -59,6 +60,7 @@ uint8_t state = WAIT_SEND;                                              // clien
 uint8_t on_delay = 0;                                                   // on delay flag indicating  edge detected and on delay timer is active
 uint8_t send = 0;                                                       // varaible set by serial monitor command to startsending a message
 uint16_t nrtoc = 0;                                                     // no response timeout counter
+uint16_t no_response_time;                                              // timeout limit for message command
 
 //-----------------------------------  RTU registers ---------------------------------------------------
 
@@ -84,7 +86,7 @@ void show_regs(String arg_header);
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("ap_server_6");
+  Serial.println("ap_server_9");
   as.Init(AP_SSID,AP_PASS);                                           // Initialize serial communication
   Serial.println("TCP server ready");
   mc.Init(DIVIDER);
@@ -102,13 +104,16 @@ void loop(){
       // ------------------------------send command received from host-----------------------------
 
       if (r_send[0] == 1){
-trs_msg.dir = r_trs[DIR]; // copy message parameters to transmit structure
-trs_msg.level = r_trs[LEVEL];
-trs_msg.dlevel = r_trs[DLEVEL];
-trs_msg.path = r_trs[PATH0] + (r_trs[PATH1] >> 16);
-trs_msg.cmd = r_trs[CMD];
-trs_msg.pload = r_trs[PLOAD];
-show_lhri_msg("registers to msg",trs_msg);
+        trs_msg.dir = r_trs[DIR]; // copy message parameters to transmit structure
+        trs_msg.level = r_trs[LEVEL];
+        trs_msg.dlevel = r_trs[DLEVEL];
+        trs_msg.path = r_trs[PATH0] + (r_trs[PATH1] >> 16);
+        trs_msg.cmd = r_trs[CMD];
+        trs_msg.pload = r_trs[PLOAD];
+        if (trs_msg.cmd == 4 || trs_msg.cmd == 5) no_response_time = NO_RESP_ACT;
+        else  no_response_time = NO_RESP_OTHER;
+
+        show_lhri_msg("registers to msg",trs_msg);
         trs_str = lp.SendMsg(trs_msg);                                  // convert command to a string
         show_lhri_str("client trs str",trs_str);
         r_send[0] = 0;
@@ -119,7 +124,7 @@ show_lhri_msg("registers to msg",trs_msg);
         mc.clear_timer();
       }
       else{        
-        // ------------- check if server responded  -----------------------------------------------
+        // ------------- check if tree responded  -----------------------------------------------
         rec_str.len = mc.MsgLen();                                      // check received message length
         if (rec_str.len > 0){
           mc.GetMsg(rec_str.bytes);                                     // get received message copy
@@ -127,20 +132,20 @@ show_lhri_msg("registers to msg",trs_msg);
           rec_msg = lp.RecMsg(rec_str);                                 // decode message bytes string to message fields
           if (rec_msg.err == 0){                                      // no crc error
             show_lhri_msg("received msg",rec_msg);
-            Serial.println("rtu received response");
-
-// message  will return from root node with rec_msg.level = trs_msg.level + 1
-r_rec[DIR]= rec_msg.dir;
-r_rec[LEVEL] = rec_msg.level;
-r_rec[DLEVEL] = rec_msg.dlevel;
-r_rec[PATH0] = rec_msg.path & 0xffff;
-r_rec[PATH1] = (rec_msg.path & 0xffff0000) >> 16;
-r_rec[CMD] = rec_msg.cmd;
-r_rec[PLOAD] = rec_msg.pload;
-r_rec[ERR] = rec_msg.err;
-r_rec[PORT] = rec_msg.port;
-as.send_reg(2,1);                                   // send response state host with response value 0
-Serial.println("rtu received respsonse");
+             // message  will return from root node with rec_msg.level = trs_msg.level + 1
+            r_rec[DIR]= rec_msg.dir;
+            r_rec[LEVEL] = rec_msg.level;
+            r_rec[DLEVEL] = rec_msg.dlevel;
+            r_rec[PATH0] = rec_msg.path & 0xffff;
+            r_rec[PATH1] = (rec_msg.path & 0xffff0000) >> 16;
+            r_rec[CMD] = rec_msg.cmd;
+            r_rec[PLOAD] = rec_msg.pload;
+            r_rec[ERR] = rec_msg.err;
+            r_rec[PORT] = rec_msg.port;
+            as.send_reg(2,1);                                   // send response state host with response value 0
+            Serial.print("rtu received respsonse after: ");
+            Serial.println(nrtoc);
+            nrtoc = 0;
           }  
           else{
             show_error_msg("error while receiving server response");
@@ -149,7 +154,7 @@ Serial.println("rtu received respsonse");
           mc.MsgClear();                                                // clear -> set len to zero
         }  
       }
-      break;
+    break;
 
     case SEND:
       if (mc.read_timer() > half_bit){                           // wait for timer1 half bit count
@@ -178,16 +183,16 @@ Serial.println("rtu received respsonse");
       if (mc.read_timer() > half_bit){                               // count half bits
         mc.clear_timer();
         nrtoc += 1;
-        if (nrtoc > NO_RESP_TIME){                                      // no response received, stop waiting for the message
+        if (nrtoc > no_response_time){                                      // no response received, stop waiting for the message
           state = WAIT_SEND;                                            // return to idle
-          Serial.println("timeout - go to WAIT_SEND");
+          Serial.println("timeout - go to WAIT_SEND" );
           as.send_reg(2,0);                                   // send response state host with response value 0          
           send = 0;
           nrtoc = 0;
           mc.disable_gpio4_int();                                        // disable INT0 when waiting for next client command            
         }
       }
-      if (byte_start == 1){                                             // INT0 - response received  
+      if (byte_start == 1){                                             // INT0 - response received
         state= RECEIVE;                                                 // set receiver to receive mode
         mc.StartReceiveMessage();                                       // reset pointers, counters
       }          
@@ -195,7 +200,6 @@ Serial.println("rtu received respsonse");
 
     case RECEIVE: // get here  by receiver byte start from WAIT_RECEIVE, untill message timeout (5 bits)
       if (byte_start == 1){                                             // new byte message arrived INT0
-        nrtoc = 0;                                                      // clear no resonse timeout counterl  
         byte_start = 0;
         mc.StartReceiveByte(half_bit);                                  // wait for qtr bit here and sample first half odf start bit, diable INT0
       }
