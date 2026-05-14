@@ -165,10 +165,9 @@ void loop(){
             Serial.print(", level="); Serial.print(irrigation_plan[i].level);
             Serial.print(", path="); Serial.print(irrigation_plan[i].path,HEX);
             Serial.print(", act="); Serial.println(irrigation_plan[i].act);
-            }
           }
-          r_plan_prt[0] = 0;                                             // clear print command
         }
+        r_plan_prt[0] = 0;                                             // clear print command
       }
       else{                                                             // host is not downloading an irrigation plan, do other bridge tasks
 
