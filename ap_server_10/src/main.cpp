@@ -77,7 +77,8 @@ uint8_t state = WAIT_SEND;                                              // clien
 uint8_t on_delay = 0;                                                   // on delay flag indicating  edge detected and on delay timer is active
 uint8_t send = 0;                                                       // varaible set by serial monitor command to startsending a message
 uint16_t nrtoc = 0;                                                     // no response timeout counter
-
+uint16_t day_minutes = 0;                                               // current time in day minutes for irrigation plan scanning
+uint8_t act = 0;                                                        // current active irrigation plan entry index
 //-----------------------------------  RTU registers ---------------------------------------------------
 
 uint16_t r_send[1] = {0x0};                                             // send command to lhri tree
@@ -103,7 +104,7 @@ void show_error_msg(String arg_text);
 void show_lhri_str(String title, lhri_str arg_str);
 void show_lhri_msg(String arg_title,lhri_msg arg_msg);
 void show_regs(String arg_header);
-uint16_t action_search(uint16_t arg_day_min,irrigations plan);
+uint16_t action_search(uint16_t arg_day_min,irrigations (&plan)[DAILY_ACT_SIZE]);
 
 
 
@@ -155,8 +156,8 @@ void loop(){
       // ------------------------- scan irrgation plan and activae valves ------------------------
       
       timeClient.update();                                               // get current time 
-      uint16_t day_minutes = timeClient.getHours() * 60 + timeClient.getMinutes();
-      uint16_t act = action_search(day_minutes,irrigation_plan);          // check irrigation table for active entry                                    
+      day_minutes = timeClient.getHours() * 60 + timeClient.getMinutes();
+      act = action_search(day_minutes,irrigation_plan);          // check irrigation table for active entry                                    
       if (act > 0){                                                      // action  is needed 
         trs_msg.dir = 0;                                                 // copy message parameters to transmit structure
         trs_msg.level = irrigation_plan[act].level;
@@ -343,7 +344,7 @@ Serial.print(",");
   Serial.println();
 }
 
-uint16_t action_search(uint16_t arg_day_min,irrigations plan){
+uint16_t action_search(uint16_t arg_day_min,irrigations (&plan)[DAILY_ACT_SIZE]){
   for (int i = 0 ; i < DAILY_ACT_SIZE; i++){
     if (irrigation_plan[i].time == arg_day_min){
       return i;
