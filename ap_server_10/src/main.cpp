@@ -87,6 +87,7 @@ uint16_t r_rec[9] = {0x0,0x05,0x05,0x1,0x0c,0x05,0x0,0x0,0x0};          // recei
 uint16_t r_dwnld_on[1] = {0};                                           // irrigation plan download in action flag
 uint16_t r_dwnld_pt[1] = {DAILY_ACT_SIZE+1};                            // irrigation plan download pointer (0 - DAILY_ACT_SIZE)
 uint16_t r_plan_entry[5] = {1450,0,0,0,0};                              // irrigation plan download registers - time, level, path,act
+uint16_t r_plan_prt[1] = {0};                                           // print irrigation plan command from host
 
 registers regs[] = {                                                    // register list metadata
 {1,0,0,&r_send[0]},
@@ -94,7 +95,8 @@ registers regs[] = {                                                    // regis
 {9,0,0,&r_rec[0]},
 {1,0,0,&r_dwnld_on[0]},
 {1,0,0,&r_dwnld_pt[0]},
-{5,0,0,&r_plan_entry[0]}
+{5,0,0,&r_plan_entry[0]},
+{1,0,0,&r_plan_prt[0]}
 };
 
 irrigations irrigation_plan[DAILY_ACT_SIZE];
@@ -133,6 +135,7 @@ void setup() {
   lp.Init();                                                            // initialize protocol class instance 
   irrigiation_plan_init(irrigation_plan);                               // initialize irrigation plan table with default values (empty talbe)
 }
+
 void loop(){
   switch(state){
     case WAIT_SEND:
@@ -154,6 +157,17 @@ void loop(){
           irrigation_plan[r_dwnld_pt[0]].path = r_plan_entry[2]+(r_plan_entry[3] >> 16);
           irrigation_plan[r_dwnld_pt[0]].act = r_plan_entry[4];
           r_dwnld_pt[0] = DAILY_ACT_SIZE +1;                            // clear pointer for next entry download
+        }
+        if (r_plan_prt[0] == 1){                                        // print irrigation plan command
+          for (int i = 0 ; i < DAILY_ACT_SIZE ; i++){
+            Serial.print("plan entry "); Serial.print(i);
+            Serial.print(": time="); Serial.print(irrigation_plan[i].time);
+            Serial.print(", level="); Serial.print(irrigation_plan[i].level);
+            Serial.print(", path="); Serial.print(irrigation_plan[i].path,HEX);
+            Serial.print(", act="); Serial.println(irrigation_plan[i].act);
+            }
+          }
+          r_plan_prt[0] = 0;                                             // clear print command
         }
       }
       else{                                                             // host is not downloading an irrigation plan, do other bridge tasks
