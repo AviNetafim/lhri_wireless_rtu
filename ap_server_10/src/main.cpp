@@ -84,14 +84,16 @@ uint8_t act = 0;                                                        // curre
 uint16_t r_send[1] = {0x0};                                             // send command to lhri tree
 uint16_t r_trs[7] = {0x0,0x05,0x05,0x1,0x0c,0x05,0x0};                  // transmit msg fields
 uint16_t r_rec[9] = {0x0,0x05,0x05,0x1,0x0c,0x05,0x0,0x0,0x0};          // receive msg fields
-uint16_t r_dwnld[1] = {DAILY_ACT_SIZE+1};                               // irrigation plan download flag
+uint16_t r_dwnld_on[1] = {0};                                           // irrigation plan download in action flag
+uint16_t r_dwnld_pt[1] = {DAILY_ACT_SIZE+1};                            // irrigation plan download pointer (0 - DAILY_ACT_SIZE)
 uint16_t r_plan_entry[5] = {1450,0,0,0,0};                              // irrigation plan download registers - time, level, path,act
 
 registers regs[] = {                                                    // register list metadata
 {1,0,0,&r_send[0]},
 {7,0,0,&r_trs[0]},
 {9,0,0,&r_rec[0]},
-{1,0,0,&r_dwnld[0]},
+{1,0,0,&r_dwnld_on[0]},
+{1,0,0,&r_dwnld_pt[0]},
 {5,0,0,&r_plan_entry[0]}
 };
 
@@ -105,15 +107,15 @@ void show_lhri_str(String title, lhri_str arg_str);
 void show_lhri_msg(String arg_title,lhri_msg arg_msg);
 void show_regs(String arg_header);
 uint16_t action_search(uint16_t arg_day_min,irrigations (&plan)[DAILY_ACT_SIZE]);
+void irrigiation_plan_init(irrigations (&plan)[DAILY_ACT_SIZE]);
 
 
 
 void setup() {
   Serial.begin(115200);
   Serial.println("ap_server_10");
-  as.Init(AP_SSID,AP_PASS);                                           // Initialize serial communication
-  Serial.println("TCP server ready");
-  WiFi.begin(ssid, password);
+  as.Init(AP_SSID,AP_PASS);                                             // Initialize ap server
+  WiFi.begin(ssid, password);                                           // initialize wifi connection for NTP client
   Serial.print("Connecting to local WiFi network");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -127,9 +129,9 @@ void setup() {
   timeClient.update();
   Serial.print("Current time: ");
   Serial.println(timeClient.getFormattedTime());
-  mc.Init(DIVIDER);
-  lp.Init();
-}
+  mc.Init(DIVIDER);                                                     // initializwe manchester coding class instance with frequency divider value     
+  lp.Init();                                                            // initialize protocol class instance 
+  irrigiation_plan_init(irrigation_plan);                               // initialize irrigation plan table with default values (empty talbe)
 
 void loop(){
   switch(state){
@@ -145,90 +147,92 @@ void loop(){
 
       // ------------------------- upload irrigation plan from host -----------------------------`
 
-      if (r_dwnld[0] < DAILY_ACT_SIZE){                                            // host update download flage with irrigation plan entry index 
-        r_dwnld[0] = DAILY_ACT_SIZE +1;                                            // clear download flag to wait for next entry
-        irrigation_plan[r_dwnld[0]].time = r_plan_entry[0];             // copy irrigation plan entry from registers to irrigation plan table
-        irrigation_plan[r_dwnld[0]].level = r_plan_entry[1];
-        irrigation_plan[r_dwnld[0]].path = r_plan_entry[2]+(r_plan_entry[3] >> 16);
-        irrigation_plan[r_dwnld[0]].act = r_plan_entry[4];
+      if (r_dwnld_on[0] == 1){                                          // host is downloading irrigation plan
+        if (r_dwnld_pt[0] <= DAILY_ACT_SIZE){                           // irrigation plan valid pointer
+          irrigation_plan[r_dwnld_pt[0]].time = r_plan_entry[0];        // copy irrigation plan entry from irrigation plan entry register to irrigation plan table
+          irrigation_plan[r_dwnld_pt[0]].level = r_plan_entry[1];
+          irrigation_plan[r_dwnld_pt[0]].path = r_plan_entry[2]+(r_plan_entry[3] >> 16);
+          irrigation_plan[r_dwnld_pt[0]].act = r_plan_entry[4];
+          r_dwnld_pt[0] = DAILY_ACT_SIZE +1;                            // clear pointer for next entry download
+        }
       }
+      else{                                                             // host is not downloading an irrigation plan, do other bridge tasks
 
-      // ------------------------- scan irrgation plan and activae valves ------------------------
-      
-      timeClient.update();                                               // get current time 
-      day_minutes = timeClient.getHours() * 60 + timeClient.getMinutes();
-      act = action_search(day_minutes,irrigation_plan);          // check irrigation table for active entry                                    
-      if (act > 0){                                                      // action  is needed 
-        trs_msg.dir = 0;                                                 // copy message parameters to transmit structure
-        trs_msg.level = irrigation_plan[act].level;
-        trs_msg.dlevel = irrigation_plan[act].level;
-        trs_msg.path = irrigation_plan[act].path;
-        trs_msg.cmd = irrigation_plan[act].act+4;  
-        trs_msg.pload = 0;
-        show_lhri_msg("registers to msg",trs_msg);
-        trs_str = lp.SendMsg(trs_msg);                                  // convert command to a string
-        show_lhri_str("client trs str",trs_str);
-        act = DAILY_ACT_SIZE+1;                                                    // clear action to wait for next active entry
-        state = SEND;                                                   // send message, to which GPIO output? TBD
-        Serial.println("start transmission go to SEND");
-        mc.TxEnable(UP,HIGH);                                           // enable up port for message transmission        
-        trs_ptr = 0;        
-        mc.clear_timer();
+        // ------------------------- scan irrgation plan and active valves ------------------------
 
-      } 
+        timeClient.update();                                            // get current time 
+        day_minutes = timeClient.getHours() * 60 + timeClient.getMinutes();
+        act = action_search(day_minutes,irrigation_plan);               // check irrigation table for active entry                                    
+        if (act <= DAILY_ACT_SIZE){                                     // active entry found, start irrigation action by sending message to tree root node
+          trs_msg.dir = 0;                                              // copy message parameters to transmit structure
+          trs_msg.level = irrigation_plan[act].level;
+          trs_msg.dlevel = irrigation_plan[act].level;
+          trs_msg.path = irrigation_plan[act].path;
+          trs_msg.cmd = irrigation_plan[act].act+4;  
+          trs_msg.pload = 0;
+          show_lhri_msg("registers to msg",trs_msg);
+          trs_str = lp.SendMsg(trs_msg);                                // convert command to a string
+          show_lhri_str("client trs str",trs_str);
+          act = DAILY_ACT_SIZE+1;                                       // clear action to wait for next active entry
+          state = SEND;                                                 // send message, to which GPIO output? TBD
+          Serial.println("start transmission go to SEND");
+          mc.TxEnable(UP,HIGH);                                         // enable up port for message transmission        
+          trs_ptr = 0;        
+          mc.clear_timer();
+        }
+        else{
 
-      // ------------------------- (optional) manual user tree operation ------------------------
+          // ------------------------- otherwise check for manualtree operation ------------------------
 
-      if (r_send[0] == 1){
-        trs_msg.dir = r_trs[DIR];                                        // copy message parameters to transmit structure
-        trs_msg.level = r_trs[LEVEL];
-        trs_msg.dlevel = r_trs[DLEVEL];
-        trs_msg.path = r_trs[PATH0] + (r_trs[PATH1] >> 16);
-        trs_msg.cmd = r_trs[CMD];
-        trs_msg.pload = r_trs[PLOAD];
-        show_lhri_msg("registers to msg",trs_msg);
-        trs_str = lp.SendMsg(trs_msg);                                  // convert command to a string
-        show_lhri_str("client trs str",trs_str);
-        r_send[0] = 0;
-        state = SEND;                                                   // send message, to which GPIO output? TBD
-        Serial.println("start transmission go to SEND");
-        mc.TxEnable(UP,HIGH);                                           // enable up port for message transmission        
-        trs_ptr = 0;        
-        mc.clear_timer();
-      }
-      else{        
-
-        // ----------------------check if server responded  -----------------------------------------
-
-        rec_str.len = mc.MsgLen();                                      // check received message length
-        if (rec_str.len > 0){
-          mc.GetMsg(rec_str.bytes);                                     // get received message copy
-          show_lhri_str("received str", rec_str);
-          rec_msg = lp.RecMsg(rec_str);                                 // decode message bytes string to message fields
-          if (rec_msg.err == 0){                                        // no crc error
-            show_lhri_msg("received msg",rec_msg);
-            Serial.println("rtu received response");
-
-            // message  will return from root node with rec_msg.level = trs_msg.level + 1
-
-            r_rec[DIR]= rec_msg.dir;
-            r_rec[LEVEL] = rec_msg.level;
-            r_rec[DLEVEL] = rec_msg.dlevel;
-            r_rec[PATH0] = rec_msg.path & 0xffff;
-            r_rec[PATH1] = (rec_msg.path & 0xffff0000) >> 16;
-            r_rec[CMD] = rec_msg.cmd;
-            r_rec[PLOAD] = rec_msg.pload;
-            r_rec[ERR] = rec_msg.err;
-            r_rec[PORT] = rec_msg.port;
-            as.send_reg(2,1);                                           // send response state host with response value 0
-            Serial.println("rtu received respsonse");
-          }  
-          else{
-            show_error_msg("error while receiving server response");
-            Serial.println(rec_msg.err);
+          if (r_send[0] == 1){                                              // host sent command to send to tree 
+            trs_msg.dir = r_trs[DIR];                                       // copy message parameters to transmit structure
+            trs_msg.level = r_trs[LEVEL];
+            trs_msg.dlevel = r_trs[DLEVEL];
+            trs_msg.path = r_trs[PATH0] + (r_trs[PATH1] >> 16);
+            trs_msg.cmd = r_trs[CMD];
+            trs_msg.pload = r_trs[PLOAD];
+            show_lhri_msg("registers to msg",trs_msg);
+            trs_str = lp.SendMsg(trs_msg);                                  // convert command to a string
+            show_lhri_str("client trs str",trs_str);
+            r_send[0] = 0;
+            state = SEND;                                                   // send message, to which GPIO output? TBD
+            Serial.println("start transmission go to SEND");
+            mc.TxEnable(UP,HIGH);                                           // enable up port for message transmission        
+            trs_ptr = 0;        
+            mc.clear_timer();
           }
-          mc.MsgClear();                                                // clear -> set len to zero
-        }  
+          else{
+
+            // ------------no birdge initiated activites,  wait for tree res  --------------------------------
+
+            rec_str.len = mc.MsgLen();                                      // check received message length
+            if (rec_str.len > 0){                                           // message received from tree
+              mc.GetMsg(rec_str.bytes);                                     // get received message copy
+              show_lhri_str("received str", rec_str);
+              rec_msg = lp.RecMsg(rec_str);                                 // decode message bytes string to message fields
+              if (rec_msg.err == 0){                                        // no crc error
+                show_lhri_msg("received msg",rec_msg);
+                Serial.println("rtu received response");
+                r_rec[DIR]= rec_msg.dir;                                    // message  will return from root node with rec_msg.level = trs_msg.level + 1
+                r_rec[LEVEL] = rec_msg.level;
+                r_rec[DLEVEL] = rec_msg.dlevel;
+                r_rec[PATH0] = rec_msg.path & 0xffff;
+                r_rec[PATH1] = (rec_msg.path & 0xffff0000) >> 16;
+                r_rec[CMD] = rec_msg.cmd;
+                r_rec[PLOAD] = rec_msg.pload;
+                r_rec[ERR] = rec_msg.err;
+                r_rec[PORT] = rec_msg.port;
+                as.send_reg(2,1);                                           // send response state host with response value 1
+                Serial.println("rtu received respsonse");
+              }  
+              else{
+                show_error_msg("error while receiving server response");
+                Serial.println(rec_msg.err);
+              }
+              mc.MsgClear();                                                // clear -> set len to zero
+            }  
+          }
+        }
       }
     break;
 
@@ -264,7 +268,7 @@ void loop(){
         if (nrtoc > NO_RESP_TIME){                                      // no response received, stop waiting for the message
           state = WAIT_SEND;                                            // return to idle
           Serial.println("timeout - go to WAIT_SEND");
-          as.send_reg(2,0);                                   // send response state host with response value 0          
+          as.send_reg(2,0);                                             // send response state host with response value 0          
           send = 0;
           nrtoc = 0;
           mc.disable_gpio4_int();                                        // disable INT0 when waiting for next client command            
@@ -349,6 +353,20 @@ uint16_t action_search(uint16_t arg_day_min,irrigations (&plan)[DAILY_ACT_SIZE])
     if (irrigation_plan[i].time == arg_day_min){
       return i;
     }
+    if (irrigation_plan[i].time == 1450){
+      break;                                                            // end of plan entries, exit loop
+    }
   }
-  return DAILY_ACT_SIZE+1; // no matching action is found
+  return DAILY_ACT_SIZE+1;                                              // no matching plan etry found
+}
+
+
+// initialize irrigation plan table with default values, for testing puposes only
+void irrigiation_plan_init(irrigations (&plan)[DAILY_ACT_SIZE]){  
+  for (int i = 0 ; i < DAILY_ACT_SIZE; i++){
+    plan[i].time = 1450;
+    plan[i].level = 0;
+    plan[i].path = 0;
+    plan[i].act = 0;
+  }
 }
