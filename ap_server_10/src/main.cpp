@@ -132,7 +132,7 @@ void setup() {
   mc.Init(DIVIDER);                                                     // initializwe manchester coding class instance with frequency divider value     
   lp.Init();                                                            // initialize protocol class instance 
   irrigiation_plan_init(irrigation_plan);                               // initialize irrigation plan table with default values (empty talbe)
-
+}
 void loop(){
   switch(state){
     case WAIT_SEND:
