@@ -31,7 +31,7 @@
 #define CODE 7                                                          // command index of completion code  
 
 const uint16_t MAX_BUFFS_SIZE = 256;
-const uint8_t REG_MAP_SIZE = 3;
+const uint8_t REG_MAP_SIZE = 5;
 
 typedef struct {                                                        // register list metadata structure
   int dim;                                                              // register array size

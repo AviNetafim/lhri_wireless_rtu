@@ -40,7 +40,7 @@
 #define ERR 7
 #define PORT 8
 
-struct action{                                                        // irrigation action structure
+struct irrigations{                                                        // irrigation action structure
   uint16_t time;
   uint8_t level;
   uint32_t path;
@@ -62,7 +62,8 @@ lhri_str rec_str;                                                       // recei
 lhri_str trs_str;                                                       // transmit string structre
 LhriProtocol lp;                                                        // protocol class isntance
 ManCode mc;  
-apServer as(TCP_PORT);  
+apServer as(TCP_PORT); 
+WiFiUDP ntpUDP; 
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 10800, 864000000); // UTC+3 offset (Israel DST), update every 60 seconds
 
 
@@ -82,8 +83,8 @@ uint16_t nrtoc = 0;                                                     // no re
 uint16_t r_send[1] = {0x0};                                             // send command to lhri tree
 uint16_t r_trs[7] = {0x0,0x05,0x05,0x1,0x0c,0x05,0x0};                  // transmit msg fields
 uint16_t r_rec[9] = {0x0,0x05,0x05,0x1,0x0c,0x05,0x0,0x0,0x0};          // receive msg fields
-uint16_t r_dwnld[1] = {-1};                                             // irrigation plan download flag
-uint16_t r_plan_entry[5] = {-1,0,0,0,0};                                // irrigation plan download registers - time, level, path,act
+uint16_t r_dwnld[1] = {DAILY_ACT_SIZE+1};                               // irrigation plan download flag
+uint16_t r_plan_entry[5] = {1450,0,0,0,0};                              // irrigation plan download registers - time, level, path,act
 
 registers regs[] = {                                                    // register list metadata
 {1,0,0,&r_send[0]},
@@ -93,7 +94,7 @@ registers regs[] = {                                                    // regis
 {5,0,0,&r_plan_entry[0]}
 };
 
-action irrigation_plan[DAILY_ACT_SIZE];
+irrigations irrigation_plan[DAILY_ACT_SIZE];
 
 //----------------------------------- functions declarrations ----------------------------------------
 
@@ -102,7 +103,7 @@ void show_error_msg(String arg_text);
 void show_lhri_str(String title, lhri_str arg_str);
 void show_lhri_msg(String arg_title,lhri_msg arg_msg);
 void show_regs(String arg_header);
-uint16_t action_search(uint16_t arg_day_min,action plan);
+uint16_t action_search(uint16_t arg_day_min,irrigations plan);
 
 
 
@@ -116,6 +117,7 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+  } 
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
@@ -142,8 +144,8 @@ void loop(){
 
       // ------------------------- upload irrigation plan from host -----------------------------`
 
-      if (r_dwnld[0] >= 0 ){                                            // host update download flage with irrigation plan entry index 
-        r_dwnld[0] = -1;                                                // clear download flag to wait for next entry
+      if (r_dwnld[0] < DAILY_ACT_SIZE){                                            // host update download flage with irrigation plan entry index 
+        r_dwnld[0] = DAILY_ACT_SIZE +1;                                            // clear download flag to wait for next entry
         irrigation_plan[r_dwnld[0]].time = r_plan_entry[0];             // copy irrigation plan entry from registers to irrigation plan table
         irrigation_plan[r_dwnld[0]].level = r_plan_entry[1];
         irrigation_plan[r_dwnld[0]].path = r_plan_entry[2]+(r_plan_entry[3] >> 16);
@@ -154,18 +156,18 @@ void loop(){
       
       timeClient.update();                                               // get current time 
       uint16_t day_minutes = timeClient.getHours() * 60 + timeClient.getMinutes();
-      action = action_search(day_minutes,irrigation_plan);               // check irrigation table for active entry                                    
-      if (action > 0){                                                   // action  is needed 
+      uint16_t act = action_search(day_minutes,irrigation_plan);          // check irrigation table for active entry                                    
+      if (act > 0){                                                      // action  is needed 
         trs_msg.dir = 0;                                                 // copy message parameters to transmit structure
-        trs_msg.level = irrigation_plan[action].level;
-        trs_msg.dlevel = irrigation_plan[action].level;
-        trs_msg.path = irrigation_plan[action].path;
-        trs_msg.cmd = irrigation_plan[action].act+4; 
+        trs_msg.level = irrigation_plan[act].level;
+        trs_msg.dlevel = irrigation_plan[act].level;
+        trs_msg.path = irrigation_plan[act].path;
+        trs_msg.cmd = irrigation_plan[act].act+4;  
         trs_msg.pload = 0;
         show_lhri_msg("registers to msg",trs_msg);
         trs_str = lp.SendMsg(trs_msg);                                  // convert command to a string
         show_lhri_str("client trs str",trs_str);
-        action = -1;                                                    // clear action to wait for next active entry
+        act = DAILY_ACT_SIZE+1;                                                    // clear action to wait for next active entry
         state = SEND;                                                   // send message, to which GPIO output? TBD
         Serial.println("start transmission go to SEND");
         mc.TxEnable(UP,HIGH);                                           // enable up port for message transmission        
@@ -227,7 +229,7 @@ void loop(){
           mc.MsgClear();                                                // clear -> set len to zero
         }  
       }
-      break;
+    break;
 
     // protocol layer - send message, wait for response, receive response, handle timeouts  
     
@@ -273,7 +275,7 @@ void loop(){
       }          
     break;
 
-    case RECEIVE: // get here  by receiver byte start from WAIT_RECEIVE, untill message timeout (5 bits)
+    case RECEIVE:                                                       // get here  by receiver byte start from WAIT_RECEIVE, untill message timeout (5 bits)
       if (byte_start == 1){                                             // new byte message arrived INT0
         nrtoc = 0;                                                      // clear no resonse timeout counterl  
         byte_start = 0;
@@ -341,11 +343,11 @@ Serial.print(",");
   Serial.println();
 }
 
-uint16_t action_search(uint16_t arg_day_min,action plan){
-  for int i = 0 ; i < DAILY_ACT_SIZE; i++){
+uint16_t action_search(uint16_t arg_day_min,irrigations plan){
+  for (int i = 0 ; i < DAILY_ACT_SIZE; i++){
     if (irrigation_plan[i].time == arg_day_min){
-      return irrigation_plan[i];
+      return i;
     }
   }
-  return -1; // no matching action is found
+  return DAILY_ACT_SIZE+1; // no matching action is found
 }

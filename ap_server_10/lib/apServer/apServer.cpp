@@ -12,8 +12,6 @@ apServer::apServer(uint16_t port) : _server(port){
 void apServer::Init(const char* ssid,const char* password){
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ssid, password);
-  WiFiUDP ntpUDP;
-  NTPClient timeClient(ntpUDP, "pool.ntp.org", 10800, 864000000); // UTC+3 offset (Israel DST), update every 60 seconds
   Serial.print("AP IP: ");
   Serial.println(WiFi.softAPIP());
   _server.begin();                                                       // Start the server
