@@ -167,35 +167,39 @@ void loop(){
             Serial.print(", act="); Serial.println(irrigation_plan[i].act);
           }
         }
-        r_plan_prt[0] = 0;                                             // clear print command
+        r_plan_prt[0] = 0;                                              // clear print command
       }
       else{                                                             // host is not downloading an irrigation plan, do other bridge tasks
 
         // ------------------------- scan irrgation plan and active valves ------------------------
 
         timeClient.update();                                            // get current time 
-        day_minutes = timeClient.getHours() * 60 + timeClient.getMinutes();
-        act = action_search(day_minutes,irrigation_plan);               // check irrigation table for active entry                                    
-        if (act <= DAILY_ACT_SIZE){                                     // active entry found, start irrigation action by sending message to tree root node
-          trs_msg.dir = 0;                                              // copy message parameters to transmit structure
-          trs_msg.level = irrigation_plan[act].level;
-          trs_msg.dlevel = irrigation_plan[act].level;
-          trs_msg.path = irrigation_plan[act].path;
-          trs_msg.cmd = irrigation_plan[act].act+4;  
-          trs_msg.pload = 0;
-          show_lhri_msg("registers to msg",trs_msg);
-          trs_str = lp.SendMsg(trs_msg);                                // convert command to a string
-          show_lhri_str("client trs str",trs_str);
-          act = DAILY_ACT_SIZE+1;                                       // clear action to wait for next active entry
-          state = SEND;                                                 // send message, to which GPIO output? TBD
-          Serial.println("start transmission go to SEND");
-          mc.TxEnable(UP,HIGH);                                         // enable up port for message transmission        
-          trs_ptr = 0;        
-          mc.clear_timer();
+        new_day_minutes = timeClient.getHours() * 60 + timeClient.getMinutes();
+        if (new_day_minutes > last_day_minutes){                        // new time in day minutes, scan irrigation plan for active entry
+          last_day_minutes = new_day_minutes;   
+          act = action_search(day_minutes,irrigation_plan);             // check irrigation table for active entry                                    
+          if (act <= DAILY_ACT_SIZE){                                   // active entry found, start irrigation action by sending message to tree root node
+            trs_msg.dir = 0;                                            // copy message parameters to transmit structure
+            trs_msg.level = irrigation_plan[act].level;
+            trs_msg.dlevel = irrigation_plan[act].level;
+            trs_msg.path = irrigation_plan[act].path;
+            trs_msg.cmd = irrigation_plan[act].act+4;  
+            trs_msg.pload = 0;
+            show_lhri_msg("registers to msg",trs_msg);
+            trs_str = lp.SendMsg(trs_msg);                                // convert command to a string
+            show_lhri_str("client trs str",trs_str);
+            act = DAILY_ACT_SIZE+1;                                       // clear action to wait for next active entry
+            state = SEND;                                                 // send message, to which GPIO output? TBD
+            Serial.println("start transmission go to SEND");
+            mc.TxEnable(UP,HIGH);                                         // enable up port for message transmission        
+            trs_ptr = 0;        
+            mc.clear_timer();
+          }
         }
+
         else{
 
-          // ------------------------- otherwise check for manualtree operation ------------------------
+          // ------------------------- otherwise check for manual tree operation ------------------------
 
           if (r_send[0] == 1){                                              // host sent command to send to tree 
             trs_msg.dir = r_trs[DIR];                                       // copy message parameters to transmit structure
